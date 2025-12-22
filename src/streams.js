@@ -1,4 +1,4 @@
-import { Emitter } from 'metautil';
+import { Emitter } from 'metautil/lib/events.js';
 
 const ID_LENGTH = 4;
 
@@ -164,4 +164,4 @@ class MetaWritable extends Emitter {
   }
 }
 
-export { chunkEncode, chunkDecode, MetaReadable, MetaWritable };
+export { chunkDecode, chunkEncode, MetaReadable, MetaWritable };

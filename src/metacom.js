@@ -1,4 +1,4 @@
-import { Emitter } from 'metautil';
+import { Emitter } from 'metautil/lib/events.js';
 import { chunkDecode, MetaReadable, MetaWritable } from './streams.js';
 
 const CALL_TIMEOUT = 7 * 1000;
@@ -62,14 +62,17 @@ class Metacom extends Emitter {
     this.callTimeout = options.callTimeout || CALL_TIMEOUT;
     this.pingInterval = options.pingInterval || PING_INTERVAL;
     this.reconnectTimeout = options.reconnectTimeout || RECONNECT_TIMEOUT;
-    this.generateId = options.generateId || crypto.randomUUID;
+    this.generateId = options.generateId || crypto.randomUUID.bind(crypto);
     this.ping = null;
+    this.messagePort = options.messagePort;
     this.open();
   }
 
   static create(url, options) {
     const { transport } = Metacom;
-    const Transport = url.startsWith('ws') ? transport.ws : transport.http;
+    let type = url.startsWith('ws') ? 'ws' : 'http';
+    if (options?.messagePort) type = 'mp';
+    const Transport = transport[type];
     return new Transport(url, options);
   }
 
@@ -165,8 +168,13 @@ class Metacom extends Emitter {
   }
 
   async load(...units) {
-    const introspect = this.scaffold('system')('introspect');
+    const introspect = this.scaffold('system')('introspect').bind(this);
     const introspection = await introspect(units);
+    this.initApi(units, introspection);
+    return introspection;
+  }
+
+  initApi(units, introspection) {
     const available = Object.keys(introspection);
     for (const unit of units) {
       if (!available.includes(unit)) continue;
@@ -183,8 +191,8 @@ class Metacom extends Emitter {
 
   scaffold(unit, ver) {
     return (method) =>
-      async (args = {}) => {
-        const id = this.generateId();
+      async (args = {}, callId) => {
+        const id = callId || this.generateId();
         const unitName = unit + (ver ? '.' + ver : '');
         const target = unitName + '/' + method;
         if (this.opening) await this.opening;
@@ -198,7 +206,7 @@ class Metacom extends Emitter {
           }, this.callTimeout);
           this.calls.set(id, [resolve, reject, timeout]);
           const packet = { type: 'call', id, method: target, args };
-          this.send(packet);
+          this.send(packet, { unit, method });
         });
       };
   }
@@ -299,9 +307,39 @@ class HttpTransport extends Metacom {
   }
 }
 
+/*
+ * MessagePortTransport is created on main thread
+ * and used as a transport between main thread and service worker thread
+ */
+class MessagePortTransport extends Metacom {
+  async open() {
+    this.active = true;
+    this.connected = true;
+    if (!this.messagePort) throw new Error('MessagePort is not initialized');
+
+    this.messagePort.onmessage = ({ data }) => {
+      if (typeof data === 'string') this.message(data);
+      else this.binary(data);
+    };
+  }
+
+  close() {
+    this.active = false;
+    this.connected = false;
+  }
+
+  send(packet, { unit, method } = {}) {
+    if (!this.messagePort) throw new Error('MessagePort is not initialized');
+
+    this.lastActivity = Date.now();
+    this.messagePort.postMessage({ unit, method, packet });
+  }
+}
+
 Metacom.transport = {
   ws: WebsocketTransport,
   http: HttpTransport,
+  mp: MessagePortTransport,
 };
 
 export { Metacom, MetacomUnit };
