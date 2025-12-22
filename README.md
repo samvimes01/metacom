@@ -110,20 +110,26 @@ cp node_modules/metacom/dist/metacom-sworker.js public/metacom-sworker.js
 ```
 
 If you use own service worker, register it in your app and import metacom-sworker.js in it.
+
 ```js
-importScripts('metacom-sworker.js');
+// your service worker file e.g. my-service-worker.js
+importScripts('/metacom-sworker.js');
+
+// your main thread file
+navigator.serviceWorker.register('/my-service-worker.js');
 ```
 
-Then in main thread code use `getMetacomProxy` function to init service worker transport and get special metacom instance.
+Then in main thread code use `Metacom.createProxy` async function to init metacom with MessageChannel transport to communicate with service worker.
 
 ```js
-import { getMetacomProxy } from 'metacom/dist/proxy.js';
+import { Metacom } from 'metacom';
 const metacomLoad = ['auth', 'example'];
-const metacom = await getMetacomProxy(metacomLoad);
+const metacom = await Metacom.createProxy(metacomLoad);
+// don't use metacom.load('auth', 'example') since createProxy does it for you (passes units to service worker)
 
+// Use metacom as usual
 const result = await metacom.api.example.methodName({ arg1, arg2 });
 ```
-
 
 ## License & Contributors
 

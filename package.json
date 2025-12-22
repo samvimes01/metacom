@@ -46,7 +46,7 @@
   ],
   "readmeFilename": "README.md",
   "scripts": {
-    "build": "rolldown -c && cp ./src/proxy.js ./dist/proxy.js",
+    "build": "rolldown -c",
     "prepublishOnly": "npm run build",
     "prepare": "npm run build",
     "test": "npm run -s lint && npm run types && node --test",

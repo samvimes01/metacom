@@ -64,15 +64,23 @@ class Metacom extends Emitter {
     this.reconnectTimeout = options.reconnectTimeout || RECONNECT_TIMEOUT;
     this.generateId = options.generateId || crypto.randomUUID.bind(crypto);
     this.ping = null;
-    this.messagePort = options.messagePort;
-    this.open();
+    if (!options.messagePortTransport) {
+      this.open();
+    }
+  }
+
+  static async createProxy(metacomLoad, options = {}) {
+    const { transport } = Metacom;
+    const Transport = transport.mp;
+    options.messagePortTransport = true;
+    const instance = new Transport('', options);
+    await instance.open(metacomLoad);
+    return instance;
   }
 
   static create(url, options) {
     const { transport } = Metacom;
-    let type = url.startsWith('ws') ? 'ws' : 'http';
-    if (options?.messagePort) type = 'mp';
-    const Transport = transport[type];
+    const Transport = url.startsWith('ws') ? transport.ws : transport.http;
     return new Transport(url, options);
   }
 
@@ -168,7 +176,7 @@ class Metacom extends Emitter {
   }
 
   async load(...units) {
-    const introspect = this.scaffold('system')('introspect').bind(this);
+    const introspect = this.scaffold('system')('introspect');
     const introspection = await introspect(units);
     this.initApi(units, introspection);
     return introspection;
@@ -312,15 +320,45 @@ class HttpTransport extends Metacom {
  * and used as a transport between main thread and service worker thread
  */
 class MessagePortTransport extends Metacom {
-  async open() {
+  async open(metacomLoad) {
     this.active = true;
     this.connected = true;
-    if (!this.messagePort) throw new Error('MessagePort is not initialized');
 
+    const messageChannel = new MessageChannel();
+    this.messagePort = messageChannel.port1;
+
+    const { protocol, hostname } = location;
+
+    const registration = await navigator.serviceWorker.ready;
+    const worker = registration.active;
+
+    worker.postMessage(
+      {
+        type: 'PORT_INITIALIZATION',
+        isSecure: protocol === 'https:',
+        host: `${hostname}:8002`, // TODO: use port from options
+        metacomLoad,
+      },
+      [messageChannel.port2],
+    );
+
+    const { promise, resolve } = Promise.withResolvers();
     this.messagePort.onmessage = ({ data }) => {
-      if (typeof data === 'string') this.message(data);
-      else this.binary(data);
+      if (data.type === 'INTROSPECTION') {
+        // instead of metacom.load with implicit introspection call
+        // use separate initApi call, when introspection data comes from worker
+        this.initApi(metacomLoad, data.payload);
+        resolve(this);
+        return;
+      }
+      if (data.type === 'RESULT') {
+        // if (typeof data === 'string') this.message(data);
+        // else this.binary(data);
+        this.message(JSON.stringify(data.payload));
+      }
     };
+
+    return promise;
   }
 
   close() {
