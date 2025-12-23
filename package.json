@@ -46,6 +46,9 @@
   ],
   "readmeFilename": "README.md",
   "scripts": {
+    "build": "rolldown -c",
+    "prepublishOnly": "npm run build",
+    "prepare": "npm run build",
     "test": "npm run -s lint && npm run types && node --test",
     "types": "tsc -p tsconfig.json",
     "lint": "eslint . && prettier -c \"**/*.js\" \"**/*.json\" \"**/*.md\"",
@@ -64,6 +67,7 @@
     "eslint": "^9.39.1",
     "eslint-config-metarhia": "^9.1.4",
     "prettier": "^3.7.4",
+    "rolldown": "^1.0.0-beta.55",
     "typescript": "^5.9.3"
   }
 }

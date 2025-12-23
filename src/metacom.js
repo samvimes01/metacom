@@ -1,4 +1,4 @@
-import { Emitter } from 'metautil';
+import { Emitter } from 'metautil/lib/events.js';
 import { chunkDecode, MetaReadable, MetaWritable } from './streams.js';
 
 const CALL_TIMEOUT = 7 * 1000;
@@ -62,9 +62,20 @@ class Metacom extends Emitter {
     this.callTimeout = options.callTimeout || CALL_TIMEOUT;
     this.pingInterval = options.pingInterval || PING_INTERVAL;
     this.reconnectTimeout = options.reconnectTimeout || RECONNECT_TIMEOUT;
-    this.generateId = options.generateId || crypto.randomUUID;
+    this.generateId = options.generateId || crypto.randomUUID.bind(crypto);
     this.ping = null;
-    this.open();
+    if (!options.messagePortTransport) {
+      this.open();
+    }
+  }
+
+  static async createProxy(metacomLoad, options = {}) {
+    const { transport } = Metacom;
+    const Transport = transport.mp;
+    options.messagePortTransport = true;
+    const instance = new Transport('', options);
+    await instance.open(metacomLoad);
+    return instance;
   }
 
   static create(url, options) {
@@ -167,6 +178,11 @@ class Metacom extends Emitter {
   async load(...units) {
     const introspect = this.scaffold('system')('introspect');
     const introspection = await introspect(units);
+    this.initApi(units, introspection);
+    return introspection;
+  }
+
+  initApi(units, introspection) {
     const available = Object.keys(introspection);
     for (const unit of units) {
       if (!available.includes(unit)) continue;
@@ -183,8 +199,8 @@ class Metacom extends Emitter {
 
   scaffold(unit, ver) {
     return (method) =>
-      async (args = {}) => {
-        const id = this.generateId();
+      async (args = {}, callId) => {
+        const id = callId || this.generateId();
         const unitName = unit + (ver ? '.' + ver : '');
         const target = unitName + '/' + method;
         if (this.opening) await this.opening;
@@ -198,7 +214,7 @@ class Metacom extends Emitter {
           }, this.callTimeout);
           this.calls.set(id, [resolve, reject, timeout]);
           const packet = { type: 'call', id, method: target, args };
-          this.send(packet);
+          this.send(packet, { unit, method });
         });
       };
   }
@@ -299,9 +315,69 @@ class HttpTransport extends Metacom {
   }
 }
 
+/*
+ * MessagePortTransport is created on main thread
+ * and used as a transport between main thread and service worker thread
+ */
+class MessagePortTransport extends Metacom {
+  async open(metacomLoad) {
+    this.active = true;
+    this.connected = true;
+
+    const messageChannel = new MessageChannel();
+    this.messagePort = messageChannel.port1;
+
+    const { protocol, hostname } = location;
+
+    const registration = await navigator.serviceWorker.ready;
+    const worker = registration.active;
+
+    worker.postMessage(
+      {
+        type: 'PORT_INITIALIZATION',
+        isSecure: protocol === 'https:',
+        host: `${hostname}:8002`, // TODO: use port from options
+        metacomLoad,
+      },
+      [messageChannel.port2],
+    );
+
+    const { promise, resolve } = Promise.withResolvers();
+    this.messagePort.onmessage = ({ data }) => {
+      if (data.type === 'INTROSPECTION') {
+        // instead of metacom.load with implicit introspection call
+        // use separate initApi call, when introspection data comes from worker
+        this.initApi(metacomLoad, data.payload);
+        resolve(this);
+        return;
+      }
+      if (data.type === 'RESULT') {
+        // if (typeof data === 'string') this.message(data);
+        // else this.binary(data);
+        this.message(JSON.stringify(data.payload));
+      }
+    };
+
+    return promise;
+  }
+
+  close() {
+    this.active = false;
+    this.connected = false;
+  }
+
+  send(packet, { unit, method } = {}) {
+    if (!this.messagePort) throw new Error('MessagePort is not initialized');
+
+    this.lastActivity = Date.now();
+    this.messagePort.postMessage({ unit, method, packet });
+  }
+}
+
 Metacom.transport = {
   ws: WebsocketTransport,
   http: HttpTransport,
+  mp: MessagePortTransport,
 };
 
 export { Metacom, MetacomUnit };

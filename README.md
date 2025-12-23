@@ -100,6 +100,37 @@ async ({ name }) => {
 };
 ```
 
+### Example: use service worker proxy
+
+Service worker proxy is a script that runs in the background and handles all metacom messages.
+Copy service worker file to your app public directory.
+
+```sh
+cp node_modules/metacom/dist/metacom-sworker.js public/metacom-sworker.js
+```
+
+If you use own service worker, register it in your app and import metacom-sworker.js in it.
+
+```js
+// your service worker file e.g. my-service-worker.js
+importScripts('/metacom-sworker.js');
+
+// your main thread file
+navigator.serviceWorker.register('/my-service-worker.js');
+```
+
+Then in main thread code use `Metacom.createProxy` async function to init metacom with MessageChannel transport to communicate with service worker.
+
+```js
+import { Metacom } from 'metacom';
+const metacomLoad = ['auth', 'example'];
+const metacom = await Metacom.createProxy(metacomLoad);
+// don't use metacom.load('auth', 'example') since createProxy does it for you (passes units to service worker)
+
+// Use metacom as usual
+const result = await metacom.api.example.methodName({ arg1, arg2 });
+```
+
 ## License & Contributors
 
 Copyright (c) 2018-2025 [Metarhia contributors](https://github.com/metarhia/metacom/graphs/contributors).
