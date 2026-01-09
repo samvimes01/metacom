@@ -44,6 +44,8 @@
     "lib/",
     "metacom.mjs",
     "metacom.d.ts",
+    "metacom.iife.js",
+    "metacom-service-worker.js",
     "CHANGELOG.md",
     "SECURITY.md"
   ],
