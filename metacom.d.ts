@@ -1,8 +1,8 @@
+import { Semaphore } from 'metautil';
 import { EventEmitter } from 'node:events';
 import { ClientRequest, ServerResponse } from 'node:http';
 import { Writable } from 'node:stream';
 import WebSocket from 'ws';
-import { Semaphore } from 'metautil';
 
 export interface MetacomError extends Error {
   code: string;
@@ -141,7 +141,7 @@ export class Server {
   httpServer: any;
   wsServer: any;
   clients: Set<Client>;
-  constructor(options: Options, application: object);
+  constructor(application: object, options: Options);
   init(): void;
   listen(): Promise<void>;
   message(client: Client, data: string): void;
@@ -181,4 +181,40 @@ export interface Context {
   uuid: string;
   state: State;
   session: Session;
+}
+
+type HandlerAccess = 'public' | 'private';
+
+interface MetacomApplicationAdapter {
+  console: Console;
+  auth: {
+    saveSession(token: string, data: unknown): Promise<void>;
+  };
+  static: {
+    constructor: { name: string };
+  } | null;
+  registerMethod(opts: {
+    unit: string;
+    methodName: string;
+    handler: Function;
+    access: HandlerAccess;
+  }): void;
+  registerHook(opts: {
+    unit: string;
+    handler: Function;
+    access: HandlerAccess;
+  }): void;
+  getMethod(unit: string, ver: string, methodName: string): Procedure | null;
+  getHook(unit: string): Hook | null;
+}
+
+interface Procedure {
+  access: HandlerAccess;
+  enter(): Promise<void>;
+  invoke(context: Context, args: any): Promise<any>;
+  leave(): void;
+}
+
+interface Hook {
+  router: Procedure;
 }
