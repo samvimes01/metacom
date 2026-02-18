@@ -1,4 +1,3 @@
-import { Semaphore } from 'metautil';
 import { EventEmitter } from 'node:events';
 import { ClientRequest, ServerResponse } from 'node:http';
 import { Writable } from 'node:stream';
@@ -132,36 +131,50 @@ export interface StreamPacket {
   size: number;
 }
 
-export class Server {
-  application: object;
-  options: Options;
-  balancer: boolean;
+export interface MetacomProtocolOptions {
+  console?: Console;
+  generateId?: () => string;
+  getMethod(unit: string, ver: string, methodName: string): Procedure | null;
+  getHook?(unit: string): Hook | null;
+  saveSession?(token: string, data: object): Promise<void>;
+}
+
+export class MetacomProtocol {
   console: Console;
-  semaphore: Semaphore;
-  httpServer: any;
-  wsServer: any;
+  generateId: () => string;
+  sessions: Map<string, Session>;
   clients: Set<Client>;
-  constructor(application: object, options: Options);
-  init(): void;
-  listen(): Promise<void>;
-  message(client: Client, data: string): void;
+  constructor(options: MetacomProtocolOptions);
+  createClient(transport: Transport): Client;
+  handleHttpRequest(client: Client, transport: Transport, req: any): Promise<void>;
+  handleWsMessage(client: Client, data: any, isBinary: boolean): void;
+  message(client: Client, data: string | Buffer): void;
   rpc(client: Client, packet: CallPacket): Promise<void>;
-  binary(client: Client, data: Buffer): void;
-  handleRpcPacket(client: Client, packet: CallPacket): void;
-  handleStreamPacket(client: Client, packet: StreamPacket): Promise<void>;
-  handleRequest(
-    client: Client,
-    transport: Transport,
-    data: Buffer,
-    application: object,
-  ): void;
+  stream(client: Client, packet: StreamPacket): Promise<void>;
+  binary(client: Client, data: Uint8Array): void;
+  request(client: Client, transport: Transport, data: Buffer): void;
   hook(
     client: Client,
-    proc: object,
+    proc: Procedure,
     packet: CallPacket,
     verb: string,
     headers: object,
   ): Promise<void>;
+  closeClients(): void;
+}
+
+export class Server {
+  application: Application;
+  options: Options;
+  protocol: MetacomProtocol;
+  balancer: boolean;
+  console: Console;
+  httpServer: any;
+  wsServer: any;
+  clients: Set<Client>;
+  constructor(application: Application, options: Options);
+  init(): void;
+  listen(): Promise<void>;
   balancing(transport: Transport): void;
   closeClients(): void;
   close(): Promise<void>;

@@ -20,6 +20,7 @@ test('Fastify plugin / calls', async (t) => {
   let fastify;
 
   t.beforeEach(async () => {
+    // eslint-disable-next-line new-cap
     fastify = Fastify();
 
     fastify.register(metacomPlugin, {
