@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width" />
+    <title>Channel messaging demo</title>
+    <link
+      href="http://fonts.googleapis.com/css?family=Open+Sans+Condensed:300|Lobster+Two"
+      rel="stylesheet"
+      type="text/css"
+    />
+  </head>
+  <body>
+    <h1>Channel messaging demo</h1>
+    <p id="auth-status">Not logged in</p>
+    <p id="message-output">Message not yet sent</p>
+
+    <form>
+      <button id="get-counter" type="button">Get counter</button>
+      <button id="upload-file" type="button">Upload file</button>
+      <button id="download-file" type="button">Download file</button>
+    </form>
+    <script type="importmap">
+      {
+        "imports": {
+          "metautil": "/metautil.mjs"
+        }
+      }
+    </script>
+    <script type="module">
+      const output = document.querySelector('#message-output');
+      const getCounterButton = document.querySelector('#get-counter');
+      const authStatus = document.querySelector('#auth-status');
+      const uploadFileButton = document.querySelector('#upload-file');
+      const downloadFileButton = document.querySelector('#download-file');
+
+      import { Metacom } from '/metacom.js';
+
+      const sw = navigator.serviceWorker;
+      // sw.register("/metacom-service-worker.js");
+      try {
+        const url = 'ws://localhost:8080/api';
+
+        // const metacomSW = await Metacom.createProxy(url, {
+        //   metacomLoad: ["auth", "console", "example", "files"],
+        // });
+        // const metacom = metacomSW;
+
+        // // Uncomment to use in main thread
+        const metacomMT = Metacom.create(url);
+        await metacomMT.load('auth', 'example');
+        const metacom = metacomMT;
+
+        const api = metacom.api;
+
+        const token = localStorage.getItem('metarhia.session.token');
+        let logged = false;
+        if (token) {
+          const res = await api.auth.restore({ token });
+          logged = res.status === 'logged';
+          updateAuthStatus();
+        }
+        if (!logged) {
+          const res = await api.auth.signin({
+            login: 'marcus',
+            password: 'marcus',
+          });
+          if (res.token) {
+            localStorage.setItem('metarhia.session.token', res.token);
+            logged = true;
+            updateAuthStatus();
+          }
+        }
+
+        getCounterButton.addEventListener('click', async (e) => {
+          e.preventDefault();
+          const packet = await api.example.counter();
+          output.innerHTML = packet.result;
+        });
+
+        const onUpload = (e) => {
+          e.preventDefault();
+          const inp = document.createElement('input');
+          inp.type = 'file';
+          inp.addEventListener('change', async (evt) => {
+            const file = evt.target.files[0];
+            inp.remove();
+            if (!file) return;
+            const res = await metacom.uploadFile(file);
+            console.log('File Uploaded: ', res);
+          });
+          inp.click();
+        };
+        const onDownload = async (e) => {
+          e.preventDefault();
+          const res = await metacom.downloadFile('hello.json');
+          console.log('File Downloaded: ', res);
+        };
+
+        uploadFileButton.addEventListener('click', onUpload);
+        downloadFileButton.addEventListener('click', onDownload);
+
+        function updateAuthStatus() {
+          setTimeout(() => {
+            authStatus.innerHTML = logged ? 'Logged in' : 'Not logged in';
+          }, 1000);
+        }
+      } catch (error) {
+        console.error('Metacom initialization error:', error);
+      }
+    </script>
+  </body>
+</html>
