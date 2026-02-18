@@ -185,36 +185,25 @@ export interface Context {
 
 type HandlerAccess = 'public' | 'private';
 
-interface MetacomApplicationAdapter {
-  console: Console;
-  auth: {
-    saveSession(token: string, data: unknown): Promise<void>;
-  };
-  static: {
-    constructor: { name: string };
-  } | null;
-  registerMethod(opts: {
-    unit: string;
-    methodName: string;
-    handler: Function;
-    access: HandlerAccess;
-  }): void;
-  registerHook(opts: {
-    unit: string;
-    handler: Function;
-    access: HandlerAccess;
-  }): void;
-  getMethod(unit: string, ver: string, methodName: string): Procedure | null;
-  getHook(unit: string): Hook | null;
-}
-
-interface Procedure {
+export interface Procedure {
   access: HandlerAccess;
   enter(): Promise<void>;
   invoke(context: Context, args: any): Promise<any>;
   leave(): void;
 }
 
-interface Hook {
+export interface Hook {
   router: Procedure;
+}
+
+export interface Application {
+  console: Console;
+  auth: {
+    saveSession(token: string, data: unknown): Promise<void>;
+  };
+  getMethod(unit: string, ver: string, methodName: string): Procedure | null;
+  getHook(unit: string): Hook | null;
+  static?: {
+    serve(url: string, transport: Transport): void;
+  };
 }

@@ -37,11 +37,16 @@
   },
   "main": "metacom.js",
   "types": "metacom.d.ts",
+  "exports": {
+    ".": "./metacom.js",
+    "./fastify": "./fastify.js"
+  },
   "browser": {
     "./metacom.js": "./metacom.mjs"
   },
   "files": [
     "lib/",
+    "fastify.js",
     "metacom.mjs",
     "metacom.d.ts",
     "CHANGELOG.md",
@@ -63,11 +68,25 @@
     "metautil": "^5.4.0",
     "ws": "^8.18.3"
   },
+  "peerDependencies": {
+    "fastify": ">=4.0.0",
+    "fastify-plugin": ">=4.0.0"
+  },
+  "peerDependenciesMeta": {
+    "fastify": {
+      "optional": true
+    },
+    "fastify-plugin": {
+      "optional": true
+    }
+  },
   "devDependencies": {
     "@types/node": "^25.2.3",
     "@types/ws": "^8.18.1",
     "eslint": "^9.39.1",
     "eslint-config-metarhia": "^9.1.7",
+    "fastify": "^5.7.4",
+    "fastify-plugin": "^5.1.0",
     "metarhia-build": "^0.0.1",
     "prettier": "^3.7.4",
     "typescript": "^5.9.3"
